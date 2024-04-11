@@ -3,14 +3,15 @@ import axios from 'axios';
 import Navbar from './Navbar';
 import { FaFolder, FaThumbsUp } from 'react-icons/fa';
 
-const User = () => {
+const User = ({ projectId }) => {
   const [selectedDomain, setSelectedDomain] = useState('');
   const [domains, setDomains] = useState([]);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
+  const [isLiked, setIsLiked] = useState(false);
+  const [likesCount, setLikesCount] = useState(0);
   const [likes, setLikes] = useState({});
-
   useEffect(() => {
     const fetchDomains = async () => {
       try {
@@ -24,9 +25,18 @@ const User = () => {
         setLoading(false);
       }
     };
-
+  
     fetchDomains();
-  }, []);
+    
+    
+    setIsLiked(getIsLiked(projectId)); 
+    // Pass projectId to fetchLikesCount
+    if (projectId) {
+      fetchLikesCount(projectId);
+      
+    }
+  
+  }, [projectId]); // Add projectId to the dependency array of useEffect
 
   const handleDomainChange = (e) => {
     setSelectedDomain(e.target.value);
@@ -60,27 +70,39 @@ const User = () => {
     }));
   };
 
-  const handleLike = async () => {
+  const fetchLikesCount = async (projectId) => {
     try {
-      setLoading(true);
-      const response = await axios.put(
-        'http://localhost:5000/api/project/like',
-        { projectId: selectedProject._id },
-        { withCredentials: true }
-      );
-      if (response.status !== 200) {
-        throw new Error('Failed to like project');
-      }
-      setLikes(prevLikes => ({
-        ...prevLikes,
-        [selectedProject.projectName]: (prevLikes[selectedProject.projectName] || 0) + 1
-      }));
+      const response = await axios.get(`http://localhost:5000/api/project/likes/${selectedProject._id}`);
+      setLikesCount(response.data.likesCount);
     } catch (error) {
-      console.error('Error liking project:', error);
-    } finally {
-      setLoading(false);
+      console.error('Error fetching likes count:', error);
     }
   };
+
+  const handleLike = async () => {
+  try {
+    const response = await axios.put(
+      'http://localhost:5000/api/project/like',
+      { projectId: selectedProject._id },
+      { withCredentials: true }
+    );
+    if (response.status === 200) {
+      const newIsLiked = !isLiked;
+      setIsLiked(newIsLiked);
+      // Toggle like status
+      localStorage.setItem(projectId, newIsLiked ? 'liked' : 'not-liked');
+      // Update likes count immediately
+      setLikesCount(prevCount => newIsLiked ? prevCount + 1 : prevCount - 1);
+    }
+  } catch (error) {
+    console.error('Error liking project:', error);
+  }
+};
+
+  const getIsLiked = (projectId) => {
+    return localStorage.getItem(projectId) === 'liked';
+  };
+  
 
   return (
     <div>
@@ -128,8 +150,9 @@ const User = () => {
                 <p><strong>Description:</strong> {selectedProject.description}</p>
                 <div className="mb-3">
                   <button type="button" className="btn btn-outline-primary me-2" onClick={handleLike}>
-                    <FaThumbsUp /> Like ({likes[selectedProject.projectName] || 0})
+                    <FaThumbsUp /> {isLiked ? 'Unlike' : 'Like'}
                   </button>
+                  <span>Likes: {likes[selectedProject.projectName]}</span>
                 </div>
               </div>
             </div>

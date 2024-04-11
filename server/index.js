@@ -4,7 +4,7 @@ import bodyParser from 'body-parser';
 import cookieParser from 'cookie-parser';
 import cors from 'cors'; // Import CORS middleware
 import bcrypt from 'bcrypt';
-import session from 'express-session';
+
 
  
 import jwt from 'jsonwebtoken'
@@ -44,15 +44,6 @@ const corsOptions = {
 };
 app.use(cookieParser());
 
-
-
-// Allow requests from specific origin
-// app.use((req, res, next) => {
-//   res.setHeader('Access-Control-Allow-Origin', 'http://localhost:3000'); // Replace with your frontend URL
-//   res.setHeader('Access-Control-Allow-Credentials', 'true');
-//   next();
-// });
-
 app.use(cors(corsOptions));
 
 // Middleware to verify JWT token
@@ -75,9 +66,6 @@ const verifyToken = (req, res, next) => {
     return res.status(403).json({ error: 'Invalid token' });
   }
 };
-
-
-
 
 // Register endpoint
 app.post('/api/register', async (req, res) => {
@@ -173,10 +161,8 @@ const projSchema = new mongoose.Schema({
 
 const Domain = mongoose.model('Domain', domainSchema);
 const Proj = mongoose.model('Proj', projSchema);
-
-
 app.use(bodyParser.json());
-app.use(cors()); // Enable CORS for all routes
+
 
 // Endpoint for submitting domain name
 app.post('/api/domains', async (req, res) => {
@@ -216,16 +202,16 @@ app.post('/api/project', async (req, res) => {
     // Check if project already exists for this domain
     const existingProject = await Proj.findOne({ domain, projectName });
     if (existingProject) {
-      console.log('Project already exists for this domain:', domain, projectName);
-      return res.status(400).json({ error: 'Project already exists for this domain' });
+      console.log('Proj already exists for this domain:', domain, projectName);
+      return res.status(400).json({ error: 'Proj already exists for this domain' });
     }
     
     // Save project
     const project = new Proj({ domain, projectName, description });
     await project.save();
     
-    console.log('Project added successfully:', project);
-    res.json({ message: 'Project added successfully', project });
+    console.log('Proj added successfully:', project);
+    res.json({ message: 'Proj added successfully', project });
   } catch (error) {
     console.error('Error adding project:', error);
     res.status(500).json({ error: error.message });
@@ -246,108 +232,52 @@ app.get('/api/project', async (req, res) => {
     }
   });
 
+  //project like
 
-// Like endpoint
-app.put('/api/project/like', verifyToken, async (req, res) => {
-  try {
+  app.put('/api/project/like', verifyToken, async (req, res) => {
     const { projectId } = req.body;
-
-    if (!projectId) {
-      return res.status(400).json({ error: 'Project ID is required' });
+    const userId = req.userId; // Assuming user ID is stored in req.user.id after verification
+  
+    try {
+      const project = await Proj.findById(projectId);
+      if (!project) {
+        return res.status(404).json({ error: 'Proj not found' });
+      }
+  
+      const likedIndex = project.likes.indexOf(userId);
+      if (likedIndex === -1) {
+        // User has not liked the project, add user ID to likes array
+        project.likes.push(userId);
+      } else {
+        // User has already liked the project, remove user ID from likes array
+        project.likes.splice(likedIndex, 1);
+      }
+  
+      await project.save();
+      res.sendStatus(200);
+    } catch (error) {
+      
+      console.error('Error liking project:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
-
-    // Check if the user has already liked the project
-    const project = await Proj.findById(projectId);
-    if (!project) {
-      return res.status(404).json({ error: 'Project not found' });
-    }
-
-    const isLiked = project.likes.includes(req.userId);
-
-    // Update project likes based on like status
-    let updatedProject;
-    if (isLiked) {
-      // Remove user ID from likes array
-      updatedProject = await Proj.findByIdAndUpdate(projectId, {
-        $pull: { likes: req.userId }
-      }, {
-        new: true
-      }).exec();
-    } else {
-      // Add user ID to likes array
-      updatedProject = await Proj.findByIdAndUpdate(projectId, {
-        $push: { likes: req.userId }
-      }, {
-        new: true
-      }).exec();
-    }
-
-    res.status(200).json({ ok: true, data: updatedProject });
-  } catch (err) {
-    res.status(422).json({ error: err.message });
-  }
-});
+  });
 
   
-
-// // Unlike endpoint
-// app.post('/api/project/unlike', async (req, res) => {
-//   try {
-//     // Get the project ID from the request body
-//     const { projectId } = req.body;
-
-//     // Update the project document to pull the user ID from the likes array
-//     const updatedProject = await Proj.findByIdAndUpdate(projectId, {
-//       $pull: { likes: req.user._id } // Pull the user ID from the likes array
-//     }, { new: true });
-
-//     // Return the updated project document
-//     res.json(updatedProject);
-//   } catch (error) {
-//     console.error('Error unliking project:', error);
-//     res.status(500).json({ error: 'Internal Server Error' });
-//   }
-// });
-
-// app.post('/api/project/comment',requireLogin,(req,res)=>{
-//   const comment = {
-//       text:req.body.text,
-//       postedBy:req.user._id
-//   }
-//   Proj.findByIdAndUpdate(req.body.projectId,{
-//       $push:{comments:comment}
-//   },{
-//       new:true
-//   })
-//   .populate("comments.postedBy","_id name")
-//   .populate("postedBy","_id name")
-//   .exec((err,result)=>{
-//       if(err){
-//           return res.status(422).json({error:err})
-//       }else{
-//           res.json(result)
-//       }
-//   })
-// })
-
-// app.delete('api/project/deletepost/:projectId',requireLogin,(req,res)=>{
-//   Post.findOne({_id:req.params.projectId})
-//   .populate("postedBy","_id")
-//   .exec((err,post)=>{
-//       if(err || !post){
-//           return res.status(422).json({error:err})
-//       }
-//       if(post.postedBy._id.toString() === req.user._id.toString()){
-//             post.remove()
-//             .then(result=>{
-//                 res.json(result)
-//             }).catch(err=>{
-//                 console.log(err)
-//             })
-//       }
-//   })
-// })
-
+  app.get('/api/project/likes/:projectId', async (req, res) => {
+    const { projectId } = req.params;
+  
+    try {
+      const project = await Proj.findById(projectId);
+      if (!project) {
+        return res.status(404).json({ error: 'Proj not found' });
+      }
+      
+      res.json({ likesCount: project.likes.length });
+    } catch (error) {
+      console.error('Error fetching likes count:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
