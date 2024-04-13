@@ -135,6 +135,8 @@
 
 import React, { useState, useEffect } from 'react';
 import Navbar from './Navbar';
+import axios from 'axios';
+import { Navigate, useNavigate } from 'react-router-dom';
 
 const Admin = () => {
   const [domainNameDomainForm, setDomainNameDomainForm] = useState('');
@@ -145,22 +147,41 @@ const Admin = () => {
   const [domains, setDomains] = useState([]);
   const [domainFormSubmissionStatus, setDomainFormSubmissionStatus] = useState('');
   const [projectFormSubmissionStatus, setProjectFormSubmissionStatus] = useState('');
+  const [isauth,setIsauth]=useState(false);
+  const navigate=useNavigate();
 
   useEffect(() => {
+
     const fetchDomains = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/domains');
+        try{
+        const res=await axios.get('http://localhost:5000/api/isauth',{withCredentials:true});
+        }
+        catch(error){
+          alert("U are not allowed to enter");
+          // const navigate=useNavigate();
+        
+          
+          navigate("/Home");
+        }
+        // console.log(res.status);
+        
+        const response = await fetch('http://localhost:5000/api/domains', {
+          credentials: 'include'
+        });
         if (!response.ok) {
           throw new Error('Failed to fetch domains');
         }
         const data = await response.json();
+        console.log(data.domains);
         setDomains(data.domains);
       } catch (error) {
         console.error('Error fetching domains:', error);
       }
     };
-
+ 
     fetchDomains();
+    
   }, []);
 
   const handleDomainSubmit = async (e) => {
@@ -173,7 +194,15 @@ const Admin = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ domainName: domainNameDomainForm }),
+      }, {
+        credentials: 'include'
       });
+      if(response.status==300){
+        alert("U are not allowed to enter \n U are directed to Home page");
+        
+          
+          navigate("/Home");;
+      }
       if (!response.ok) {
         throw new Error('Failed to submit domain');
       }
@@ -202,7 +231,16 @@ const Admin = () => {
           projectName: projectName, 
           description: description 
         }),
+        
+      }, {
+        credentials: 'include'
       });
+      if(response.status==300){
+        alert("U are not allowed to enter \n U are directed to Home page");
+        
+          
+          navigate("/Home");;
+      }
       if (!response.ok) {
         throw new Error('Failed to add project');
       }

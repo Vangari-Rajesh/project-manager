@@ -12,13 +12,20 @@ const User = ({ projectId }) => {
   const [isLiked, setIsLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
   const [likes, setLikes] = useState({});
+  const [id,setId]=useState(null);
+  const [cmnts,setCmnts]=useState([]);
+  const [cmntcount, setCmntcount]=useState(0);
+  const [usercmnt,setUsercmnt]=useState("");
   useEffect(() => {
     const fetchDomains = async () => {
       try {
         setLoading(true);
-        const response = await fetch('http://localhost:5000/api/domains');
-        const data = await response.json();
+        const response = await fetch('http://localhost:5000/api/domains', {
+  credentials: 'include'
+});
+const data = await response.json();
         setDomains(data.domains);
+        setId(data.id);
         setLoading(false);
       } catch (error) {
         console.error('Error fetching domains:', error);
@@ -68,7 +75,24 @@ const User = ({ projectId }) => {
       ...prevLikes,
       [project.projectName]: project.likes ? project.likes.length : 0
     }));
+    setIsLiked(project.likes.some(like => like === id));
+  
+    setLikesCount(project.likes.length);
+    setCmntcount(project.comments.length);
+    setCmnts(project.comments);
+  
+    // Check if the user has a comment in the project's comments
+    const userHasComment = project.comments.some(comment => comment.postedBy === id);
+    if (userHasComment) {
+      // Find the user's comment
+      const userComment = project.comments.find(comment => comment.postedBy === id);
+      setUsercmnt(userComment.text);
+    } else {
+      // Clear user's comment if not found
+      setUsercmnt("");
+    }
   };
+  
 
   const fetchLikesCount = async (projectId) => {
     try {
@@ -91,8 +115,9 @@ const User = ({ projectId }) => {
       setIsLiked(newIsLiked);
       // Toggle like status
       localStorage.setItem(projectId, newIsLiked ? 'liked' : 'not-liked');
+      console.log("is liked ",newIsLiked);
       // Update likes count immediately
-      setLikesCount(prevCount => newIsLiked ? prevCount + 1 : prevCount - 1);
+      setLikesCount( newIsLiked ? likesCount + 1 : likesCount - 1);
     }
   } catch (error) {
     console.error('Error liking project:', error);
@@ -102,7 +127,23 @@ const User = ({ projectId }) => {
   const getIsLiked = (projectId) => {
     return localStorage.getItem(projectId) === 'liked';
   };
-  
+  const handleCommentChange = (e) => {
+    setUsercmnt(e.target.value);
+  };
+  const handleSubmitComment= async () => {
+    const res=await axios.put(
+      'http://localhost:5000/api/project/Coment',
+      { projectId: selectedProject._id ,text:usercmnt},
+      { withCredentials: true }
+    );
+    if(res.status==200){
+    alert("Comment added successfully ");
+    setCmntcount(cmntcount+1);  
+  }
+   else
+   alert("Something went wrong");
+
+  }
 
   return (
     <div>
@@ -152,7 +193,32 @@ const User = ({ projectId }) => {
                   <button type="button" className="btn btn-outline-primary me-2" onClick={handleLike}>
                     <FaThumbsUp /> {isLiked ? 'Unlike' : 'Like'}
                   </button>
-                  <span>Likes: {likes[selectedProject.projectName]}</span>
+                  <span>Likes: {likesCount}</span>
+                </div>
+                <div>
+                  <span>Comments : {cmntcount}</span>
+                     <div>
+                        <textarea
+                          value={usercmnt}
+                          onChange={handleCommentChange}
+                          placeholder="Write your comment..."
+                          rows={4}
+                          cols={50}
+                        />
+                        <button onClick={handleSubmitComment}>Submit</button>
+
+                        {/* Displaying all comments */}
+                        <div>
+                          {cmntcount !== 0 && cmnts.map((comment, index) => (
+                                  comment.postedBy !== id ? (
+                                    <div key={index}>
+                                      <p>{comment.text}</p>
+                                      <p>Posted by: {comment.postedBy}</p>
+                                    </div>
+                                  ) : (<div></div>)
+                                ))}
+                        </div>
+                      </div>
                 </div>
               </div>
             </div>

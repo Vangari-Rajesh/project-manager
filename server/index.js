@@ -32,6 +32,7 @@ mongoose.connect(DB_URL)
 const userSchema = new mongoose.Schema({
   username: { type: String, unique: true },
   password: String,
+  Role:{type: String ,default:"user"}
 });
 
 const User = mongoose.model('User', userSchema);
@@ -59,7 +60,10 @@ const verifyToken = (req, res, next) => {
   try {
     // Verify token
     const decoded = jwt.verify(token, JWT_SECRET);
-    req.userId = decoded.userId; // Attach userId to request object
+
+    req.userId = decoded.userId; 
+    console.log("role ",decoded);// Attach userId to request object
+    req.type=decoded.role;
     next();
   } catch (error) {
     console.error('Token verification failed:', error);
@@ -87,7 +91,7 @@ app.post('/api/register', async (req, res) => {
     await newUser.save();
 
     // Generate JWT
-    const token = jwt.sign({ userId: newUser._id }, JWT_SECRET, { expiresIn: '1d' }); // Change secret key and expiration as needed
+    const token = jwt.sign({ userId: newUser._id,role:newUser.Role }, JWT_SECRET, { expiresIn: '1d' }); // Change secret key and expiration as needed
     // localStorage.setItem('token', token);
     
 console.log('Generated token in registration:', token);
@@ -120,9 +124,9 @@ app.post('/api/login', async (req, res) => {
     if (!isPasswordValid) {
       return res.status(401).json({ error: 'Invalid username or password' });
     }
-
+    console.log("in login ",user.Role);
     // Generate JWT
-    const token = jwt.sign({ userId: user._id }, 'your-secret-key', { expiresIn: '1d' }); // Change secret key and expiration as needed
+    const token = jwt.sign({ userId: user._id,role:user.Role }, 'your-secret-key', { expiresIn: '1d' }); // Change secret key and expiration as needed
 // Log the token to the console
 // localStorage.setItem('token', token);
 console.log('Generated token in login:', token);
@@ -152,21 +156,38 @@ const projSchema = new mongoose.Schema({
   projectName: String,
   domain: String,
   description: String,
-  likes:[{type:ObjectId,ref:"User"}],
-  comments:[{
-      text:String,
-      postedBy:{type:ObjectId,ref:"User"}
+  likes: [{ type: ObjectId, ref: "User" }],
+  comments: [{
+    text: String,
+    time: { type: Date, default: Date.now }, // Add the time field
+    postedBy: { type: ObjectId, ref: "User" }
   }],
+});
+
+// Middleware to sort comments array in decreasing order based on time before saving
+projSchema.pre('save', function(next) {
+  this.comments.sort((a, b) => b.time - a.time);
+  next();
 });
 
 const Domain = mongoose.model('Domain', domainSchema);
 const Proj = mongoose.model('Proj', projSchema);
 app.use(bodyParser.json());
 
-
+app.get('/api/isauth',verifyToken,async(req,res)=>{
+  console.log("is adming ",req.type);
+  if(req.type=='Admins')
+  res.status(200).json({});
+  res.status(400).json({error:"Unauthorized user for this route"});
+})
 // Endpoint for submitting domain name
-app.post('/api/domains', async (req, res) => {
+app.post('/api/domains',verifyToken, async (req, res) => {
+  console.log("in post requests iam sorry");
+  if(req.type!='Admins'){
+    res.status(300).json({error:" U are not allowed to enter "});
+  }
   try {
+    
     const { domainName } = req.body;
     // Check if domain already exists
     const existingDomain = await Domain.findOne({ domainName });
@@ -183,19 +204,25 @@ app.post('/api/domains', async (req, res) => {
 });
 
 // Endpoint for fetching all domain names
-app.get('/api/domains', async (req, res) => {
+app.get('/api/domains',verifyToken, async (req, res) => {
     try {
+      console.log("in get request ");
       // Fetch all domains from the database
-      const domains = await Domain.find({}, 'domainName'); // Only retrieve domainName field
-      res.json({ domains });
+      const domains = await Domain.find({});
+      console.log(domains+" domains list"); // Only retrieve domainName field
+      res.json({ id:req.userId,domains });
     } catch (error) {
+      console.log("error "+error);
       res.status(500).json({ error: error.message });
     }
   });
   
 
 // Endpoint for adding a project
-app.post('/api/project', async (req, res) => {
+app.post('/api/project', verifyToken,async (req, res) => {
+  if(req.type!="Admins"){
+    res.status(300).json({error:"Unauthorized"});
+  }
   try {
     const { domain, projectName, description } = req.body;
     
@@ -261,7 +288,36 @@ app.get('/api/project', async (req, res) => {
       res.status(500).json({ error: 'Internal server error' });
     }
   });
-
+  app.put('/api/project/Coment',verifyToken,async(req,res)=>{
+    const { text, projectId } = req.body;
+    const userId = req.userId;
+    
+    try {
+      const project = await Proj.findById(projectId);
+      if (!project) {
+        return res.status(404).json({ error: 'Proj not found' });
+      }
+      
+      // Check if the user already has a comment
+      const existingCommentIndex = project.comments.findIndex(comment => comment.postedBy.toString() === userId);
+      if (existingCommentIndex !== -1) {
+        // If the user already has a comment, update it
+        project.comments[existingCommentIndex].text = text;
+      } else {
+        // If the user doesn't have a comment, add a new one
+        project.comments.push({ text, postedBy: userId });
+      }
+    
+      // Save the updated project
+      await project.save();
+      
+      // Return a success response
+      return res.status(200).json({ message: 'Comment updated/added successfully' });
+    } catch (error) {
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+    
+  });
   
   app.get('/api/project/likes/:projectId', async (req, res) => {
     const { projectId } = req.params;
@@ -278,6 +334,8 @@ app.get('/api/project', async (req, res) => {
       res.status(500).json({ error: 'Internal server error' });
     }
   });
+
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
+
